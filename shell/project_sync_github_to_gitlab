@@ -1,0 +1,108 @@
+GITHUB_BACKBASE=https://$GITHUB_USER:$GITHUB_TOKEN@github.com/ourTeam/projectModuleA
+GITHUB_PORTAL_EXPORTS=https://$GITHUB_USER:$GITHUB_TOKEN@github.com/ourTeam/projectModuleB
+GITLAB_BACKBASE=https://$GITLAB_USER:$GITLAB_TOKEN@our.gitlab.com/projectModuleA.git
+GITLAB_PORTAL_EXPORTS=https://$GITLAB_USER:$GITLAB_TOKEN@our.gitlab.com/phoenix/projectModuleB.git
+
+BRANCH_2_0_0="feature_20"
+BRANCH_2_1="feature_21"
+
+RELEASE_NAME_2_0_0="release/2.0.0"
+RELEASE_NAME_2_1="release/2.1.0"
+
+## functions ##
+reupload_project() {
+	export http_proxy=$GITHUB_PROXY
+	export https_proxy=$GITHUB_PROXY
+
+	# Clone GitHub branches
+	git clone -b $1 $2
+
+	# Repoint to Gitlab repo then push the branch
+	unset http_proxy
+	unset https_proxy
+
+	cd $4
+	git branch
+	git remote add gitlab $3
+	git push -u gitlab $1
+}
+
+
+
+merge_sync() {
+	# set to true for testing.. actual should be false
+	if [ "$REUPLOAD_PROJECT" = "false" ]; then
+		export http_proxy=$GITHUB_PROXY; 
+		export https_proxy=$GITHUB_PROXY
+
+		# Clone GitHub branches
+		git clone -b $1 $GITHUB_BACKBASE
+        git clone -b $1 $GITHUB_PORTAL_EXPORTS
+        
+        unset http_proxy
+		unset https_proxy
+	fi
+
+	# Merge process GITLAB
+	cd $WORKSPACE
+	git clone -b $2 $3 $4-gitlab
+	cd $4-gitlab
+	git config user.email "jenkins@company.com"
+	git config user.name "jenkins"
+
+	git remote show origin
+	git remote update
+	git fetch
+	git show-ref
+
+	git remote add github_repo $WORKSPACE/$5
+	git pull github_repo $1
+
+	git status
+
+	git push -u origin $2
+}
+
+
+if [ "$REUPLOAD_PROJECT" = "true" ]; then
+	# Backbase project
+	reupload_project $BRANCH_2_0_0 $GITHUB_BACKBASE $GITLAB_BACKBASE projectModuleA
+	reupload_project $BRANCH_2_1 $GITHUB_BACKBASE $GITLAB_BACKBASE projectModuleA
+	
+	# Portals project
+	reupload_project $BRANCH_2_0_0 $GITHUB_PORTAL_EXPORTS $GITLAB_PORTAL_EXPORTS projectModuleB
+	reupload_project $BRANCH_2_1 $GITHUB_PORTAL_EXPORTS $GITLAB_PORTAL_EXPORTS projectModuleB
+fi
+
+
+if [ "$MERGE_SYNC_2_0_0" = "true" ]; then
+	merge_sync $BRANCH_2_0_0 \
+			$RELEASE_NAME_2_0_0 \
+			$GITLAB_BACKBASE \
+			entirely_other_dir_name \
+			projectModuleA
+			
+	merge_sync $BRANCH_2_0_0 \
+			$RELEASE_NAME_2_0_0 \
+			$GITLAB_PORTAL_EXPORTS \
+			projectModuleB \
+			projectModuleB
+fi
+
+if [ "$MERGE_SYNC_2_1" = "true" ]; then
+	merge_sync $BRANCH_2_1 \
+			$RELEASE_NAME_2_1 \
+			$GITLAB_BACKBASE \
+			entirely_other_dir_name \
+			projectModuleA
+			
+	merge_sync $BRANCH_2_1 \
+			$RELEASE_NAME_2_1 \
+			$GITLAB_PORTAL_EXPORTS \
+			projectModuleB \
+			projectModuleB
+fi
+
+exit
+
+
